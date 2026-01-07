@@ -81,33 +81,35 @@ function normalize(v) {
 function applyRule(row) {
     let name = row.name.toLowerCase();
 
-    let width   = normalize(row.width);
-    let dataType = normalize(row.datatype);
-    let format  = normalize(row.format);
-    let align   = normalize(row.align);
+    const widthFromExcel    = normalize(row.width);
+    const dataTypeFromExcel = normalize(row.datatype);
+    const formatFromExcel   = normalize(row.format);
+    const alignFromExcel    = normalize(row.align);
 
-    /* width */
+    let width   = widthFromExcel;
+    let dataType = dataTypeFromExcel;
+    let format  = formatFromExcel;
+    let align   = alignFromExcel;
+
+    // WIDTH
     if (!width) {
         if (name.includes('gc_')) width = '250';
         else if (name.includes('ngay')) width = '100';
         else width = '120';
     }
 
-    /* dataType */
+    // DATATYPE
     if (!dataType) {
-        if (name.includes('so') || name.includes('sl')) dataType = 'N';
-        else if (name.includes('ngay')) dataType = 'D';
-        else dataType = '';
+        if (name.includes('ngay')) dataType = 'D';
+        else if (name.includes('so') || name.includes('sl')) dataType = 'N';
     }
 
-    /* format */
-    const hasDataTypeFromExcel = normalize(row.datatype);
-
-    if (!format && !hasDataTypeFromExcel) {
+    // FORMAT (CHỈ KHI CẢ datatype & format ĐỀU TRỐNG)
+    if (!format && !dataTypeFromExcel) {
         if (dataType === 'N') format = 'Qty';
     }
 
-    /* align */
+    // ALIGN (EXCEL ƯU TIÊN TUYỆT ĐỐI)
     if (!align && name.includes('ngay')) {
         align = 'Center';
     }
@@ -187,4 +189,5 @@ function copyXML() {
 
 </body>
 </html>
+
 
