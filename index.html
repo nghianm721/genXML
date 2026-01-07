@@ -101,8 +101,10 @@ function applyRule(row) {
     }
 
     /* format */
-    if (!format && dataType === 'N') {
-        format = 'Qty';
+    const hasDataTypeFromExcel = normalize(row.datatype);
+
+    if (!format && !hasDataTypeFromExcel) {
+        if (dataType === 'N') format = 'Qty';
     }
 
     /* align */
@@ -185,3 +187,4 @@ function copyXML() {
 
 </body>
 </html>
+
