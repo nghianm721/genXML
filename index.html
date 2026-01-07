@@ -1,0 +1,206 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>XML Grid Field Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        textarea {
+            width: 100%;
+            height: 220px;
+        }
+
+        input[type=text] {
+            width: 100%;
+            padding: 6px;
+        }
+
+        button {
+            padding: 8px 16px;
+            margin: 6px 0;
+            cursor: pointer;
+        }
+
+        .rule {
+            background: #f5f5f5;
+            padding: 10px;
+            border-left: 4px solid #2196f3;
+            margin-bottom: 15px;
+        }
+
+        .flex {
+            display: flex;
+            gap: 20px;
+        }
+
+        .box {
+            flex: 1;
+        }
+
+        small {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>XML Grid Field Generator</h2>
+
+    <div class="rule">
+        <b>Quy tắc:</b><br>
+        • Nguồn dữ liệu: Excel hoặc Google Sheet (publish CSV)<br>
+        • Cột bắt buộc: <code>name, v1</code><br>
+        • Cột tùy chọn: <code>v2, width, dataType, format, align</code><br><br>
+        <b>Rule tự động (nếu Excel/Sheet không nhập):</b><br>
+        • <code>ntext-</code>, <code>gc_</code> → width = 250<br>
+        • name chứa <code>ngay</code> → width = 100<br>
+        • name chứa <code>so</code> hoặc <code>sl</code> → dataType=N, format=Qty<br>
+        • <code>o = e</code>
+    </div>
+
+    <h3>Google Sheet (CSV)</h3>
+    <input id="sheetUrl"
+           placeholder="https://docs.google.com/spreadsheets/d/FILE_ID/export?format=csv&gid=0">
+    <small>Sheet phải Publish hoặc Public</small><br>
+    <button onclick="loadFromSheet()">Load từ Google Sheet</button>
+
+    <hr>
+
+    <h3>Hoặc chọn file Excel</h3>
+    <input type="file" id="excelFile" accept=".xlsx,.xls">
+
+    <div class="flex">
+        <div class="box">
+            <h3>Map dịch (VI = EN)</h3>
+            <textarea id="mapEditor">
+Số lượng=Quantity
+Ngày chứng từ=Document date
+Ghi chú=Note
+Công=Work
+Số giờ=Hours
+    </textarea>
+        </div>
+
+        <div class="box">
+            <h3>XML Output</h3>
+            <textarea id="output"></textarea>
+        </div>
+    </div>
+
+    <button onclick="copyXML()">Copy XML</button>
+
+    <script>
+/* ---------- MAP ---------- */
+function parseMap() {
+  const map = {};
+  document.getElementById("mapEditor").value
+    .split("\n")
+    .forEach(l => {
+      if (!l.includes("=")) return;
+      const [k,v] = l.split("=");
+      map[k.trim()] = v.trim();
+    });
+  return map;
+}
+
+/* ---------- CORE ---------- */
+function generateFromRows(rows) {
+  const map = parseMap();
+  let xml = "";
+
+  rows.forEach(r => {
+    let name = (r.name || "").trim();
+    if (!name) return;
+
+    let v1 = (r.v1 || "").trim();
+    let eText = (r.v2 || map[v1] || v1);
+    let oText = eText;
+
+    let width = 120;
+    let dataType = "";
+    let format = "";
+    let align = "";
+
+    // AUTO RULE
+    if (name.startsWith("ntext-")) {
+      name = name.replace("ntext-", "");
+      width = 250;
+    }
+    if (name.includes("gc_")) width = 250;
+    if (name.includes("ngay")) width = 100;
+    if (name.includes("so") || name.includes("sl")) {
+      dataType = "N";
+      format = "Qty";
+    }
+
+    // OVERRIDE FROM SHEET / EXCEL
+    if (r.width) width = r.width;
+    if (r.dataType) dataType = r.dataType;
+    if (r.format) format = r.format;
+    if (r.align) align = r.align;
+
+    xml += `<field name="${name}" width="${width}"`;
+    if (dataType) xml += ` dataType="${dataType}"`;
+    if (format) xml += ` format="${format}"`;
+    if (align) xml += ` align="${align}"`;
+    xml += `>\n`;
+    xml += `\t<text v="${v1}" e="${eText}" o="${oText}"/>\n`;
+    xml += `</field>\n`;
+  });
+
+  document.getElementById("output").value = xml;
+}
+
+/* ---------- GOOGLE SHEET ---------- */
+function loadFromSheet() {
+  const url = document.getElementById("sheetUrl").value.trim();
+  if (!url) return alert("Nhập link Google Sheet CSV");
+
+  fetch(url)
+    .then(res => res.text())
+    .then(csv => generateFromRows(csvToJson(csv)))
+    .catch(() => alert("Không load được Sheet. Kiểm tra publish CSV + chạy qua http(s)."));
+}
+
+function csvToJson(csv) {
+  const lines = csv.split("\n").filter(l => l.trim());
+  const headers = lines[0].split(",").map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const obj = {};
+    line.split(",").forEach((v,i) => obj[headers[i]] = v.trim());
+    return obj;
+  });
+}
+
+/* ---------- EXCEL ---------- */
+document.getElementById("excelFile").addEventListener("change", e => {
+  const reader = new FileReader();
+  reader.onload = evt => {
+    const wb = XLSX.read(evt.target.result, { type: "binary" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet);
+    generateFromRows(rows);
+  };
+  reader.readAsBinaryString(e.target.files[0]);
+});
+
+/* ---------- COPY ---------- */
+function copyXML() {
+  const t = document.getElementById("output");
+  t.select();
+  document.execCommand("copy");
+  alert("Đã copy XML");
+}
+    </script>
+
+</body>
+</html>
