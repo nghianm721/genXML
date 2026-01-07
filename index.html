@@ -4,39 +4,37 @@
 <meta charset="UTF-8" />
 <title>XML Grid Field Generator</title>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        padding: 16px;
-        background: #f7f7f7;
-    }
-    textarea, input {
-        width: 100%;
-        box-sizing: border-box;
-        margin: 6px 0;
-        padding: 6px;
-    }
-    textarea {
-        min-height: 160px;
-        font-family: Consolas, monospace;
-    }
-    button {
-        padding: 8px 16px;
-        margin: 6px 0;
-        cursor: pointer;
-    }
-    .box {
-        background: #fff;
-        padding: 12px;
-        border-radius: 6px;
-        margin-bottom: 12px;
-    }
-    .rule {
-        font-size: 13px;
-        background: #eef;
-        padding: 10px;
-        border-radius: 6px;
-        line-height: 1.5;
-    }
+body {
+    font-family: Arial, sans-serif;
+    padding: 16px;
+    background: #f5f5f5;
+}
+textarea, input {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 6px 0;
+    padding: 6px;
+}
+textarea {
+    min-height: 220px;
+    font-family: Consolas, monospace;
+}
+button {
+    padding: 8px 16px;
+    margin-top: 6px;
+    cursor: pointer;
+}
+.box {
+    background: #fff;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 12px;
+}
+.rule {
+    background: #eef;
+    font-size: 13px;
+    line-height: 1.5;
+}
 </style>
 </head>
 
@@ -46,27 +44,29 @@
 
 <div class="box rule">
 <b>Quy tắc:</b><br>
-- name có <b>ngay</b> → dataType="D", align="Center", width=100<br>
-- name có <b>so</b> hoặc <b>sl</b> → dataType="N", format="Qty"<br>
+- Excel columns: <b>name | v1 | v2 | width | datatype | format | align</b><br>
+- Excel nhập gì → ưu tiên tuyệt đối<br>
+- Không nhập → mới áp rule<br>
+- name có <b>ngay</b> → width=100, align=Center<br>
+- name có <b>so</b> hoặc <b>sl</b> → dataType=N, format=Qty<br>
 - name có <b>gc_</b> → width=250<br>
-- Cột Excel: <b>name | v1 | v2 | width | dataType | format | align</b><br>
-- width / dataType / format / align: nếu trống → tự áp quy tắc<br>
-- v2 trống → dùng v1<br>
+- Không có dataType → <b>KHÔNG sinh attribute</b>
 </div>
 
 <div class="box">
-<b>Google Sheet (public CSV link)</b>
-<input id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv">
-<button onclick="loadFromSheet()">Load từ Google Sheet</button>
+<b>Google Sheet (CSV public)</b>
+<input id="sheetUrl"
+value="https://docs.google.com/spreadsheets/d/e/2PACX-1vR8xLFEg4CNb7qWveE6lG6aGPR6gHtm56uGs_0heFRzj2w0K9ntQlEiZCM4PI6bVO9-MHQd0vnKwYFV/pub?gid=0&single=true&output=csv">
+<button onclick="loadFromSheet()">Load Google Sheet</button>
 </div>
 
 <div class="box">
-<b>Hoặc upload file Excel (.xlsx)</b>
+<b>Hoặc upload Excel (.xlsx)</b>
 <input type="file" id="fileInput" accept=".xlsx">
 </div>
 
 <div class="box">
-<b>Kết quả XML</b>
+<b>Kết quả XML</b><br>
 <button onclick="copyXML()">Copy XML</button>
 <textarea id="output"></textarea>
 </div>
@@ -74,30 +74,38 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
 <script>
-function applyRule(col) {
-    let width = col.width || '';
-    let dataType = col.dataType || '';
-    let format = col.format || '';
-    let align = col.align || '';
+function normalize(v) {
+    return v === undefined || v === null ? '' : String(v).trim();
+}
 
-    const name = col.name.toLowerCase();
+function applyRule(row) {
+    let name = row.name.toLowerCase();
 
+    let width   = normalize(row.width);
+    let dataType = normalize(row.datatype);
+    let format  = normalize(row.format);
+    let align   = normalize(row.align);
+
+    /* width */
     if (!width) {
-        if (name.includes('gc_')) width = 250;
-        else if (name.includes('ngay')) width = 100;
-        else width = 120;
+        if (name.includes('gc_')) width = '250';
+        else if (name.includes('ngay')) width = '100';
+        else width = '120';
     }
 
+    /* dataType */
     if (!dataType) {
-        if (name.includes('ngay')) dataType = 'D';
-        else if (name.includes('so') || name.includes('sl')) dataType = 'N';
-        else dataType = 'S';
+        if (name.includes('so') || name.includes('sl')) dataType = 'N';
+        else if (name.includes('ngay')) dataType = 'D';
+        else dataType = '';
     }
 
+    /* format */
     if (!format && dataType === 'N') {
         format = 'Qty';
     }
 
+    /* align */
     if (!align && name.includes('ngay')) {
         align = 'Center';
     }
@@ -107,16 +115,20 @@ function applyRule(col) {
 
 function generateXML(rows) {
     let xml = '';
+
     rows.forEach(r => {
         if (!r.name) return;
 
         const rule = applyRule(r);
-        const v1 = r.v1 || '';
-        const v2 = r.v2 || v1;
+        const v1 = normalize(r.v1);
+        const v2 = normalize(r.v2) || v1;
 
-        xml += `<field name="${r.name}" width="${rule.width}" dataType="${rule.dataType}"`;
-        if (rule.format) xml += ` format="${rule.format}"`;
-        if (rule.align) xml += ` align="${rule.align}"`;
+        xml += `<field name="${r.name}" width="${rule.width}"`;
+
+        if (rule.dataType) xml += ` dataType="${rule.dataType}"`;
+        if (rule.format)   xml += ` format="${rule.format}"`;
+        if (rule.align)    xml += ` align="${rule.align}"`;
+
         xml += `>\n`;
         xml += `  <text v="${v1}" e="${v2}" o="${v2}"/>\n`;
         xml += `</field>\n\n`;
@@ -125,7 +137,7 @@ function generateXML(rows) {
     document.getElementById('output').value = xml.trim();
 }
 
-function parseSheetData(data) {
+function parseTable(data) {
     const headers = data[0].map(h => h.toLowerCase());
     const rows = [];
 
@@ -140,16 +152,14 @@ function parseSheetData(data) {
 }
 
 async function loadFromSheet() {
-    const url = document.getElementById('sheetUrl').value.trim();
-    if (!url) return alert('Nhập link Google Sheet');
-
+    const url = document.getElementById('sheetUrl').value;
     try {
         const res = await fetch(url);
         const text = await res.text();
         const rows = text.split('\n').map(r => r.split(','));
-        parseSheetData(rows);
-    } catch (e) {
-        alert('Không load được Google Sheet. Phải publish CSV và chạy qua GitHub Pages.');
+        parseTable(rows);
+    } catch {
+        alert('Không load được Google Sheet (phải chạy qua GitHub Pages)');
     }
 }
 
@@ -161,7 +171,7 @@ document.getElementById('fileInput').addEventListener('change', e => {
         const wb = XLSX.read(evt.target.result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-        parseSheetData(data);
+        parseTable(data);
     };
     reader.readAsBinaryString(file);
 });
